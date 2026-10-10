@@ -5,7 +5,7 @@ from apps.academic.models import Department, FieldOfStudy
 
 
 class Person(models.Model):
-    person_id = models.IntegerField(
+    person_id = models.AutoField(
         db_column="PersonId",
         primary_key=True,
     )
@@ -76,7 +76,7 @@ class Person(models.Model):
 
 
 class Student(models.Model):
-    student_id = models.IntegerField(
+    student_id = models.AutoField(
         db_column="StudentId",
         primary_key=True,
     )
@@ -115,7 +115,7 @@ class Student(models.Model):
 
 
 class Professor(models.Model):
-    professor_id = models.IntegerField(
+    professor_id = models.AutoField(
         db_column="ProfessorId",
         primary_key=True,
     )
@@ -154,11 +154,11 @@ class Professor(models.Model):
         db_table = "[users].[Professor]"
 
     def __str__(self):
-        return self.person.__str__()
+        return str(self.person)
 
 
 class Staff(models.Model):
-    staff_id = models.IntegerField(
+    staff_id = models.AutoField(
         db_column="StaffId",
         primary_key=True,
     )
@@ -199,4 +199,4 @@ class Staff(models.Model):
         db_table = "[users].[Staff]"
 
     def __str__(self):
-        return self.person.__str__()
+        return str(self.person)
