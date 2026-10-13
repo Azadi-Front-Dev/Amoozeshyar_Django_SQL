@@ -33,13 +33,15 @@ class Role(models.Model):
     class Meta:
         managed = False
         db_table = "[auth].[Role]"
+        verbose_name = "نقش"
+        verbose_name_plural = "نقش‌ ها"
 
     def __str__(self):
         return self.display_name
 
 
 class UserAccount(models.Model):
-    user_id = models.IntegerField(
+    user_id = models.AutoField(
         db_column="UserId",
         primary_key=True,
     )
@@ -74,12 +76,23 @@ class UserAccount(models.Model):
         null=True,
     )
 
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
+
     class Meta:
         managed = False
         db_table = "[auth].[UserAccount]"
+        verbose_name = "حساب کاربری"
+        verbose_name_plural = "حساب‌های کاربری"
 
     def __str__(self):
         return self.username
+
 
 
 class UserRole(models.Model):
