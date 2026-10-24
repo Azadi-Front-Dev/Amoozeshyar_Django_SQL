@@ -21,6 +21,10 @@ from .models import UserAccount
 from .serializers import LoginSerializer, RegisterSerializer
 from .services import authenticate_account
 
+from apps.users.models import Professor
+from apps.education.models import ClassSection
+from apps.accounts.permissions import IsProfessor
+
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -313,9 +317,6 @@ class StudentDashboardView(APIView):
         )
 
 
-
-
-
 # -------
 # class StudentDashboardView(APIView):
 #     permission_classes = [IsAuthenticated, IsStudent]
@@ -492,3 +493,155 @@ class PasswordResetConfirmView(APIView):
         return Response({
             "detail": "رمز عبور با موفقیت تغییر کرد."
         })
+
+
+class ProfessorDashboardView(APIView):
+    permission_classes = [IsAuthenticated, IsProfessor]
+
+    def get(self, request):
+        account = request.user
+        person = account.person
+
+        # استاد باید متعلق به حساب احراز هویت‌شده باشد
+        try:
+            professor = Professor.objects.select_related(
+                "person",
+                "department",
+                "department__faculty",
+                "department__faculty__university",
+            ).get(person=person)
+        except Professor.DoesNotExist:
+            return Response(
+                {"detail": "اطلاعات استاد پیدا نشد."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # دریافت ترم فعال
+        semester = (
+            Semester.objects
+            .filter(
+                is_active=True,
+                academic_year__is_active=True,
+            )
+            .select_related("academic_year")
+            .first()
+        )
+
+        profile = {
+            "first_name": person.first_name,
+            "last_name": person.last_name,
+            "username": account.username,
+            "personnel_code": professor.personnel_code,
+            "academic_rank": professor.academic_rank,
+            "department": professor.department.name,
+            "faculty": professor.department.faculty.name,
+            "university": (
+                professor.department.faculty.university.name
+            ),
+        }
+
+        # اگر ترم فعالی وجود نداشته باشد
+        if semester is None:
+            return Response(
+                {
+                    "profile": profile,
+                    "semester": None,
+                    "summary": {
+                        "course_count": 0,
+                        "student_count": 0,
+                        "schedule_count": 0,
+                    },
+                    "courses": [],
+                    "schedule": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # فقط کلاس‌های متعلق به استاد واردشده
+        sections = (
+            ClassSection.objects
+            .filter(
+                professor=professor,
+                course_offering__semester=semester,
+            )
+            .select_related(
+                "course_offering",
+                "course_offering__course",
+            )
+            .prefetch_related(
+                "schedules__room__building",
+            )
+        )
+
+        courses = []
+        schedule = []
+        total_students = 0
+
+        for section in sections:
+            course = section.course_offering.course
+
+            # تعداد دانشجویان ثبت‌نام‌شده در این کلاس
+            student_count = Enrollment.objects.filter(
+                class_section=section,
+                dropped_at__isnull=True,
+                status="ENROLLED",
+            ).count()
+
+            total_students += student_count
+
+            courses.append({
+                "class_section_id": section.class_section_id,
+                "course_code": course.course_code,
+                "course_title": course.title,
+                "units": course.units,
+                "section_code": section.section_code,
+                "capacity": section.capacity,
+                "student_count": student_count,
+            })
+
+            for item in section.schedules.all():
+                room = item.room
+                building = room.building if room else None
+
+                schedule.append({
+                    "class_section_id": section.class_section_id,
+                    "course_title": course.title,
+                    "day_of_week": item.day_of_week,
+                    "start_time": (
+                        item.start_time.strftime("%H:%M")
+                        if item.start_time else None
+                    ),
+                    "end_time": (
+                        item.end_time.strftime("%H:%M")
+                        if item.end_time else None
+                    ),
+                    "building": building.name if building else None,
+                    "room_number": room.room_number if room else None,
+                })
+
+        schedule.sort(
+            key=lambda item: (
+                item["day_of_week"] or 0,
+                item["start_time"] or "",
+            )
+        )
+
+        return Response(
+            {
+                "profile": profile,
+                "semester": {
+                    "title": semester.title,
+                    "academic_year": semester.academic_year.title,
+                    "start_date": semester.start_date.isoformat(),
+                    "end_date": semester.end_date.isoformat(),
+                },
+                "summary": {
+                    "course_count": len(courses),
+                    "student_count": total_students,
+                    "schedule_count": len(schedule),
+                },
+                "courses": courses,
+                "schedule": schedule,
+            },
+            status=status.HTTP_200_OK,
+        )
