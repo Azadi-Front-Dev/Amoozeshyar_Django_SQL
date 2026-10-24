@@ -5,6 +5,7 @@ from .views import (
     PasswordResetConfirmView,
 )
 from .views import ProfessorDashboardView
+from .views import StudentProfileView
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
@@ -34,5 +35,10 @@ urlpatterns = [
         "professor/dashboard/",
         ProfessorDashboardView.as_view(),
         name="professor-dashboard",
+    ),
+    path(
+        "student/profile/",
+        StudentProfileView.as_view(),
+        name="student-profile",
     ),
 ]

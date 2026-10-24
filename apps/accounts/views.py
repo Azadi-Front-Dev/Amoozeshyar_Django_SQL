@@ -645,3 +645,66 @@ class ProfessorDashboardView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class StudentProfileView(APIView):
+    permission_classes = [IsAuthenticated, IsStudent]
+
+    def get(self, request):
+        account = request.user
+        person = account.person
+
+        try:
+            student = (
+                Student.objects
+                .select_related(
+                    "person",
+                    "field_of_study",
+                    "field_of_study__education_level",
+                    "field_of_study__department",
+                    "field_of_study__department__faculty",
+                    "field_of_study__department__faculty__university",
+                )
+                .get(person=person)
+            )
+        except Student.DoesNotExist:
+            return Response(
+                {"detail": "اطلاعات دانشجو پیدا نشد."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        field = student.field_of_study
+        department = field.department
+        faculty = department.faculty
+        university = faculty.university
+        education_level = field.education_level
+
+        return Response(
+            {
+                "user": {
+                    "username": account.username,
+                },
+                "person": {
+                    "first_name": person.first_name,
+                    "last_name": person.last_name,
+                    "national_id": person.national_id,
+                    "birth_date": person.birth_date,
+                    "gender": person.gender,
+                    "phone_number": person.phone_number,
+                    "email": person.email,
+                    "address": person.address,
+                },
+                "student": {
+                    "student_number": student.student_number,
+                    "entry_year": student.entry_year,
+                    "status": student.status,
+                    "field_of_study": field.name,
+                    "field_code": field.code,
+                    "education_level": education_level.name,
+                    "department": department.name,
+                    "faculty": faculty.name,
+                    "university": university.name,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

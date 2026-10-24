@@ -153,10 +153,24 @@ SIMPLE_JWT = {
 }
 
 
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Amoozeshyar API",
     "DESCRIPTION": "University Management System API",
     "VERSION": "1.0.0",
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+            },
+        },
+    },
+    "SECURITY": [{"BearerAuth": []}],
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+    },
 }
 
 

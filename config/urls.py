@@ -28,4 +28,14 @@ urlpatterns = [
         "api/accounts/",
         include("apps.accounts.urls"),
     ),
+
+    path("api/finance/", include("apps.finance.urls")),
+
+    path("api/exam/", include("apps.exams.urls")),
+
+    path(
+        "api/registration/",
+        include("apps.registration.urls"),
+    ),
+
 ]

@@ -1,12 +1,12 @@
-
 from django.db import models
 
 from apps.education.models import ClassSection
 from apps.users.models import Student
-
+from django.db import models
+from apps.education.models import Semester
 
 class Enrollment(models.Model):
-    enrollment_id = models.IntegerField(
+    enrollment_id = models.AutoField(
         db_column="EnrollmentId",
         primary_key=True,
     )
@@ -86,3 +86,43 @@ class EnrollmentHistory(models.Model):
     def __str__(self):
         return f"Enrollment history {self.history_id}"
 
+
+class EnrollmentPeriod(models.Model):
+    enrollment_period_id = models.AutoField(
+        db_column="EnrollmentPeriodId",
+        primary_key=True,
+    )
+
+    semester = models.ForeignKey(
+        Semester,
+        on_delete=models.DO_NOTHING,
+        db_column="SemesterId",
+        related_name="enrollment_periods",
+    )
+
+    start_at = models.DateTimeField(
+        db_column="StartAt",
+    )
+
+    end_at = models.DateTimeField(
+        db_column="EndAt",
+    )
+
+    is_open = models.BooleanField(
+        db_column="IsOpen",
+        default=False,
+    )
+
+    created_at = models.DateTimeField(
+        db_column="CreatedAt",
+    )
+
+    class Meta:
+        managed = False
+        db_table = "[registration].[EnrollmentPeriod]"
+
+    def __str__(self):
+        return (
+            f"{self.semester} | "
+            f"{self.start_at} - {self.end_at}"
+        )
