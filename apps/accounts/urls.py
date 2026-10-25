@@ -6,6 +6,7 @@ from .views import (
 )
 from .views import ProfessorDashboardView
 from .views import StudentProfileView
+from .views import AdminDashboardView
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
@@ -40,5 +41,10 @@ urlpatterns = [
         "student/profile/",
         StudentProfileView.as_view(),
         name="student-profile",
+    ),
+    path(
+        "admin/dashboard/",
+        AdminDashboardView.as_view(),
+        name="admin-dashboard",
     ),
 ]

@@ -1,4 +1,3 @@
-
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -81,6 +80,7 @@ class AvailableCoursesView(APIView):
             .select_related(
                 "course_offering__course",
                 "course_offering__semester",
+                "professor__person",
             )
             .prefetch_related("schedules")
             .order_by(
@@ -160,7 +160,7 @@ class EnrollStudentView(APIView):
                     "در حال حاضر انتخاب واحد فعال نیست."
                 )
 
-            # دریافت گروه درسی
+            # دریافت گروه درسی و اطلاعات استاد
             try:
                 section = (
                     ClassSection.objects
@@ -168,6 +168,7 @@ class EnrollStudentView(APIView):
                     .select_related(
                         "course_offering__course",
                         "course_offering__semester",
+                        "professor__person",
                     )
                     .get(pk=section_id)
                 )
@@ -176,6 +177,17 @@ class EnrollStudentView(APIView):
 
             offering = section.course_offering
             course = offering.course
+
+            # استخراج نام استاد
+            professor_name = "نامشخص"
+
+            if section.professor and section.professor.person:
+                person = section.professor.person
+
+                professor_name = (
+                                     f"{person.first_name or ''} "
+                                     f"{person.last_name or ''}"
+                                 ).strip() or "نامشخص"
 
             if offering.semester_id != period.semester_id:
                 return error(
@@ -194,8 +206,6 @@ class EnrollStudentView(APIView):
 
             if not course.is_active:
                 return error("این درس غیرفعال است.")
-
-            # بررسی سابقه ثبت‌نام در همین گروه
 
             # بررسی سابقه ثبت‌نام در همین گروه
             previous = (
@@ -222,7 +232,9 @@ class EnrollStudentView(APIView):
                     ).count()
 
                     if enrolled_count >= section.capacity:
-                        return error("ظرفیت این گروه تکمیل شده است.")
+                        return error(
+                            "ظرفیت این گروه تکمیل شده است."
+                        )
 
                     # فعال‌سازی مجدد همان رکورد قبلی
                     previous.status = "ENROLLED"
@@ -243,6 +255,7 @@ class EnrollStudentView(APIView):
                             "class_section_id": section.pk,
                             "course_title": course.title,
                             "section_code": section.section_code,
+                            "professor_name": professor_name,
                         },
                         status=status.HTTP_200_OK,
                     )
@@ -315,8 +328,7 @@ class EnrollStudentView(APIView):
                 )
 
                 return error(
-                    ""
-                    # "ابتدا باید پیش‌ نیازهای این درس را بگذرانید "
+                    "ابتدا باید پیش‌نیازهای این درس را بگذرانید: "
                     + "، ".join(missing_courses)
                 )
 
@@ -344,13 +356,13 @@ class EnrollStudentView(APIView):
                 for new_schedule in selected_schedules:
                     for old_schedule in existing_schedules:
                         same_day = (
-                            new_schedule.day_of_week
-                            == old_schedule.day_of_week
+                                new_schedule.day_of_week
+                                == old_schedule.day_of_week
                         )
 
                         overlaps = (
-                            new_schedule.start_time < old_schedule.end_time
-                            and new_schedule.end_time > old_schedule.start_time
+                                new_schedule.start_time < old_schedule.end_time
+                                and new_schedule.end_time > old_schedule.start_time
                         )
 
                         if same_day and overlaps:
@@ -375,6 +387,7 @@ class EnrollStudentView(APIView):
                 "class_section_id": section.pk,
                 "course_title": course.title,
                 "section_code": section.section_code,
+                "professor_name": professor_name,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -468,8 +481,8 @@ class DropEnrollmentView(APIView):
 
 class MyEnrollmentsView(APIView):
     """
-    فهرست درس‌های ثبت‌شده دانشجو در نیمسال فعال.
-    این API برای بارگذاری مجدد فهرست پس از Refresh استفاده می‌شود.
+    فهرست درس‌های ثبت‌شده دانشجو در نیمسال فعال،
+    همراه با برنامه هفتگی، استاد و محل برگزاری.
     """
 
     permission_classes = [IsAuthenticated, IsStudent]
@@ -511,18 +524,24 @@ class MyEnrollmentsView(APIView):
             )
             .select_related(
                 "class_section",
+                "class_section__professor",
+                "class_section__professor__person",
                 "class_section__course_offering",
                 "class_section__course_offering__course",
                 "class_section__course_offering__semester",
             )
-            .prefetch_related("class_section__schedules")
+            .prefetch_related(
+                "class_section__schedules__room__building",
+            )
             .order_by("-registered_at")
         )
 
-        # اگر نیمسال فعالی وجود دارد، فقط درس‌های همان نیمسال را نشان بده.
+        # در صورت وجود نیمسال فعال، فقط درس‌های همان نیمسال نمایش داده می‌شوند.
         if active_period is not None:
             enrollments = enrollments.filter(
-                class_section__course_offering__semester=active_period.semester
+                class_section__course_offering__semester=(
+                    active_period.semester
+                )
             )
 
         results = []
@@ -531,45 +550,83 @@ class MyEnrollmentsView(APIView):
             section = enrollment.class_section
             offering = section.course_offering
             course = offering.course
+            professor = section.professor
+
+            # نام استاد از مدل Person دریافت می‌شود.
+            professor_name = ""
+
+            if professor and professor.person:
+                professor_name = (
+                    f"{professor.person.first_name or ''} "
+                    f"{professor.person.last_name or ''}"
+                ).strip()
 
             schedules = []
 
             for schedule in section.schedules.all():
-                schedules.append({
-                    "day_of_week": schedule.day_of_week,
-                    "start_time": (
-                        schedule.start_time.strftime("%H:%M")
-                        if schedule.start_time else None
-                    ),
-                    "end_time": (
-                        schedule.end_time.strftime("%H:%M")
-                        if schedule.end_time else None
-                    ),
-                })
+                room = schedule.room
+                building = room.building if room else None
 
-            results.append({
-                "id": section.pk,
-                "class_section_id": section.pk,
-                "section_code": section.section_code,
-                "course_title": course.title,
-                "course_code": getattr(course, "course_code", ""),
-                "units": getattr(
-                    course,
-                    "units",
-                    getattr(course, "credit", 0),
-                ),
-                "semester": offering.semester.title,
-                "status": enrollment.status,
-                "registered_at": enrollment.registered_at,
-                "schedules": schedules,
-            })
+                room_number = room.room_number if room else ""
+                building_name = building.name if building else ""
+
+                if building_name and room_number:
+                    location = (
+                        f"{building_name}، اتاق {room_number}"
+                    )
+                elif room_number:
+                    location = f"اتاق {room_number}"
+                elif building_name:
+                    location = building_name
+                else:
+                    location = "محل کلاس ثبت نشده"
+
+                schedules.append(
+                    {
+                        "day_of_week": schedule.day_of_week,
+                        "start_time": (
+                            schedule.start_time.strftime("%H:%M")
+                            if schedule.start_time
+                            else None
+                        ),
+                        "end_time": (
+                            schedule.end_time.strftime("%H:%M")
+                            if schedule.end_time
+                            else None
+                        ),
+                        "room_number": room_number,
+                        "building": building_name,
+                        "room_type": (
+                            room.room_type if room else ""
+                        ),
+                        "location": location,
+                    }
+                )
+
+            results.append(
+                {
+                    "id": section.pk,
+                    "class_section_id": section.pk,
+                    "section_code": section.section_code,
+                    "course_title": course.title,
+                    "course_code": course.course_code,
+                    "units": course.units,
+                    "course_type": course.course_type,
+                    "semester": offering.semester.title,
+                    "professor_name": professor_name,
+                    "status": enrollment.status,
+                    "registered_at": enrollment.registered_at,
+                    "schedules": schedules,
+                }
+            )
 
         return Response(
             {
                 "success": True,
                 "semester": (
                     active_period.semester.title
-                    if active_period else None
+                    if active_period
+                    else None
                 ),
                 "results": results,
             },

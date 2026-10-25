@@ -1,4 +1,3 @@
-
 from rest_framework import serializers
 
 
@@ -19,17 +18,34 @@ class AvailableCourseSerializer(serializers.Serializer):
         source="course_offering.semester.title"
     )
 
+    # نام استاد ارائه‌دهنده
+    professor_name = serializers.SerializerMethodField()
+
     capacity = serializers.SerializerMethodField()
     enrolled_count = serializers.IntegerField()
     remaining_capacity = serializers.SerializerMethodField()
     schedules = serializers.SerializerMethodField()
+
+    def get_professor_name(self, obj):
+        professor = obj.professor
+
+        if not professor or not professor.person:
+            return "نامشخص"
+
+        person = professor.person
+
+        full_name = (
+            f"{person.first_name or ''} "
+            f"{person.last_name or ''}"
+        ).strip()
+
+        return full_name or "نامشخص"
 
     def get_capacity(self, obj):
         return obj.capacity
 
     def get_remaining_capacity(self, obj):
         return max(obj.capacity - obj.enrolled_count, 0)
-
 
     def get_schedules(self, obj):
         schedules = obj.schedules.all()
@@ -42,7 +58,6 @@ class AvailableCourseSerializer(serializers.Serializer):
             }
             for schedule in schedules
         ]
-
 
 
 class EnrollRequestSerializer(serializers.Serializer):
